@@ -8,7 +8,6 @@ const generateSpiralPoints = (count, turns, radius, height) => {
   const tangents = [];
   const quaternions = [];
   
-  // Helper to get position at any t
   const getPosition = (t) => {
     const angle = turns * 2 * Math.PI * t;
     const currentRadius = radius * (1 - t);
@@ -21,16 +20,11 @@ const generateSpiralPoints = (count, turns, radius, height) => {
   
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
-    
-    // Get current position
     const pos = getPosition(t);
-    
-    // Get tangent by computing a nearby point and subtracting
-    const dt = 0.001;  // Small delta for numerical derivative
+    const dt = 0.001;
     const nextPos = getPosition(t + dt);
     const tangent = nextPos.sub(pos).normalize();
     
-    // Create quaternion for rotation
     const quaternion = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
     quaternion.setFromUnitVectors(up, tangent);
@@ -38,30 +32,68 @@ const generateSpiralPoints = (count, turns, radius, height) => {
     points.push([pos.x, pos.y, pos.z]);
     tangents.push([tangent.x, tangent.y, tangent.z]);
     quaternions.push([quaternion.x, quaternion.y, quaternion.z, quaternion.w]);
-    
-    if (i % 10 === 0) {
-      console.log(`Point ${i}:`, {
-        t,
-        position: [pos.x, pos.y, pos.z],
-        tangent: [tangent.x, tangent.y, tangent.z]
-      });
-    }
   }
   
   return { points, tangents, quaternions };
 };
 
-const SmallCone = ({ position, quaternion, scale = 0.1 }) => (
-  <group position={position}>
-    <mesh 
-      scale={scale}
-      quaternion={quaternion}
-    >
-      <coneGeometry args={[1, 2.5, 16]} />
-      <meshStandardMaterial color="red" />
-    </mesh>
-  </group>
-);
+const SmallCone = ({ position, quaternion, scale = 0.1 }) => {
+  // Geometry constants
+  const coneLength = 2.5;
+  const coneRadius = 1.0;
+  const protrusion = coneLength * 0.2;  // 1/5 beyond cone tip
+  const arrowLength = coneLength + protrusion;
+  const arrowRadius = coneRadius * 0.15;  // Thin arrow relative to cone base
+  const arrowHeadLength = arrowRadius * 4;  // Proportional head size
+  
+  // Position calculations
+  // Since Three.js centers geometries:
+  // - Cone base at y=0, tip at y=coneLength
+  // - Arrow should extend from y=0 to y=(coneLength + protrusion)
+  const arrowShaftLength = arrowLength - arrowHeadLength;
+  const arrowShaftCenter = arrowShaftLength / 2;
+  const arrowHeadPosition = arrowShaftLength;
+  
+  console.log('Geometry:', {
+    coneLength,
+    protrusion,
+    arrowLength,
+    arrowShaftLength,
+    arrowShaftCenter,
+    arrowHeadPosition
+  });
+
+  return (
+    <group position={position}>
+      {/* Red cone */}
+      <mesh 
+        scale={scale}
+        quaternion={quaternion}
+      >
+        <coneGeometry args={[coneRadius, coneLength, 16]} />
+        <meshStandardMaterial color="red" />
+      </mesh>
+      
+      {/* Blue arrow */}
+      <group 
+        quaternion={quaternion}
+        scale={scale}
+      >
+        {/* Arrow shaft */}
+        <mesh position={[0, arrowShaftCenter, 0]}>
+          <cylinderGeometry args={[arrowRadius, arrowRadius, arrowShaftLength, 8]} />
+          <meshStandardMaterial color="blue" />
+        </mesh>
+        
+        {/* Arrow head */}
+        <mesh position={[0, arrowHeadPosition, 0]}>
+          <coneGeometry args={[arrowRadius * 2, arrowHeadLength, 8]} />
+          <meshStandardMaterial color="blue" />
+        </mesh>
+      </group>
+    </group>
+  );
+};
 
 const MainCone = ({ height = 10, radius = 5 }) => (
   <mesh position={[0, height/2, 0]}>
