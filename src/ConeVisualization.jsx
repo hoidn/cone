@@ -4,43 +4,51 @@ import { PerspectiveCamera, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
 const generateSpiralPoints = (count, turns, radius, height) => {
-  console.log('Generating points with:', { count, turns, radius, height });
-  
   const points = [];
+  const tangents = [];
   const quaternions = [];
+  
+  // Helper to get position at any t
+  const getPosition = (t) => {
+    const angle = turns * 2 * Math.PI * t;
+    const currentRadius = radius * (1 - t);
+    return new THREE.Vector3(
+      currentRadius * Math.cos(angle),
+      height * t,
+      currentRadius * Math.sin(angle)
+    );
+  };
   
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
-    const angle = turns * 2 * Math.PI * t;
     
-    // Position on cone surface
-    const currentRadius = radius * (1 - t);
-    const x = currentRadius * Math.cos(angle);
-    const z = currentRadius * Math.sin(angle);
-    const y = height * t;
+    // Get current position
+    const pos = getPosition(t);
     
-    // Calculate direction vector from cone center to point
-    const centerToPoint = new THREE.Vector3(x, y - height/2, z);
-    centerToPoint.normalize();
+    // Get tangent by computing a nearby point and subtracting
+    const dt = 0.001;  // Small delta for numerical derivative
+    const nextPos = getPosition(t + dt);
+    const tangent = nextPos.sub(pos).normalize();
     
-    // Create quaternion to rotate from default orientation (0,1,0) to surface normal
+    // Create quaternion for rotation
     const quaternion = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
-    quaternion.setFromUnitVectors(up, centerToPoint);
+    quaternion.setFromUnitVectors(up, tangent);
     
-    points.push([x, y, z]);
+    points.push([pos.x, pos.y, pos.z]);
+    tangents.push([tangent.x, tangent.y, tangent.z]);
     quaternions.push([quaternion.x, quaternion.y, quaternion.z, quaternion.w]);
     
-    // Log every 10th point for debugging
     if (i % 10 === 0) {
       console.log(`Point ${i}:`, {
-        position: [x, y, z],
-        quaternion: [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+        t,
+        position: [pos.x, pos.y, pos.z],
+        tangent: [tangent.x, tangent.y, tangent.z]
       });
     }
   }
   
-  return { points, quaternions };
+  return { points, tangents, quaternions };
 };
 
 const SmallCone = ({ position, quaternion, scale = 0.1 }) => (
@@ -49,14 +57,14 @@ const SmallCone = ({ position, quaternion, scale = 0.1 }) => (
       scale={scale}
       quaternion={quaternion}
     >
-      <coneGeometry args={[1, 2, 8]} />
+      <coneGeometry args={[1, 2.5, 16]} />
       <meshStandardMaterial color="red" />
     </mesh>
   </group>
 );
 
 const MainCone = ({ height = 10, radius = 5 }) => (
-  <mesh position={[0, height/2, 0]}>  {/* Center the cone vertically */}
+  <mesh position={[0, height/2, 0]}>
     <coneGeometry args={[radius, height, 32]} />
     <meshStandardMaterial color="gray" transparent opacity={0.7} />
   </mesh>
@@ -83,7 +91,7 @@ const Scene = () => {
           key={idx} 
           position={pos}
           quaternion={quaternions[idx]}
-          scale={mainConeRadius * 0.08}
+          scale={mainConeRadius * 0.04}
         />
       ))}
       
