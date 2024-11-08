@@ -1,72 +1,96 @@
 import React from 'react';
-import { useRef } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import { PerspectiveCamera, OrbitControls } from '@react-three/drei';
+import * as THREE from 'three';
 
-// Utility function to calculate spiral points
 const generateSpiralPoints = (count, turns, radius, height) => {
+  console.log('Generating points with:', { count, turns, radius, height });
+  
   const points = [];
+  const quaternions = [];
+  
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1);
     const angle = turns * 2 * Math.PI * t;
-    const r = radius * (1 - t * 0.5); // Spiral gets slightly tighter at top
-    const x = r * Math.cos(angle);
-    const z = r * Math.sin(angle);
+    
+    // Position on cone surface
+    const currentRadius = radius * (1 - t);
+    const x = currentRadius * Math.cos(angle);
+    const z = currentRadius * Math.sin(angle);
     const y = height * t;
+    
+    // Calculate direction vector from cone center to point
+    const centerToPoint = new THREE.Vector3(x, y - height/2, z);
+    centerToPoint.normalize();
+    
+    // Create quaternion to rotate from default orientation (0,1,0) to surface normal
+    const quaternion = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    quaternion.setFromUnitVectors(up, centerToPoint);
+    
     points.push([x, y, z]);
+    quaternions.push([quaternion.x, quaternion.y, quaternion.z, quaternion.w]);
+    
+    // Log every 10th point for debugging
+    if (i % 10 === 0) {
+      console.log(`Point ${i}:`, {
+        position: [x, y, z],
+        quaternion: [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+      });
+    }
   }
-  return points;
+  
+  return { points, quaternions };
 };
 
-// Small cone with arrow
-const SmallConeWithArrow = ({ position, scale = 0.1 }) => (
+const SmallCone = ({ position, quaternion, scale = 0.1 }) => (
   <group position={position}>
-    <mesh scale={scale}>
+    <mesh 
+      scale={scale}
+      quaternion={quaternion}
+    >
       <coneGeometry args={[1, 2, 8]} />
       <meshStandardMaterial color="red" />
-    </mesh>
-    <mesh position={[0, scale * 2, 0]} scale={[scale * 0.2, scale * 1, scale * 0.2]}>
-      <cylinderGeometry args={[0.2, 0.2, 1]} />
-      <meshStandardMaterial color="blue" />
     </mesh>
   </group>
 );
 
-// Main cone component
 const MainCone = ({ height = 10, radius = 5 }) => (
-  <mesh>
+  <mesh position={[0, height/2, 0]}>  {/* Center the cone vertically */}
     <coneGeometry args={[radius, height, 32]} />
     <meshStandardMaterial color="gray" transparent opacity={0.7} />
   </mesh>
 );
 
-// Scene component with all elements
 const Scene = () => {
   const mainConeHeight = 10;
   const mainConeRadius = 5;
   const smallConesCount = 50;
   const spiralTurns = 3;
 
-  const smallConePositions = generateSpiralPoints(
+  const { points, quaternions } = generateSpiralPoints(
     smallConesCount,
     spiralTurns,
-    mainConeRadius * 0.8,
-    mainConeHeight * 0.8
+    mainConeRadius,
+    mainConeHeight
   );
 
   return (
     <group>
       <MainCone height={mainConeHeight} radius={mainConeRadius} />
-      {smallConePositions.map((pos, idx) => (
-        <SmallConeWithArrow key={idx} position={pos} />
+      {points.map((pos, idx) => (
+        <SmallCone 
+          key={idx} 
+          position={pos}
+          quaternion={quaternions[idx]}
+          scale={mainConeRadius * 0.08}
+        />
       ))}
       
-      {/* Lighting */}
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={1} />
       <pointLight position={[-10, 10, -10]} intensity={0.5} />
       
-      {/* Camera */}
       <PerspectiveCamera
         makeDefault
         position={[15, 15, 15]}
@@ -77,7 +101,6 @@ const Scene = () => {
   );
 };
 
-// Main component
 const ConeVisualization = () => {
   return (
     <div className="h-screen w-full">
